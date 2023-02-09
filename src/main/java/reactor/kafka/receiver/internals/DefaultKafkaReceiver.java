@@ -110,11 +110,8 @@ public class DefaultKafkaReceiver<K, V> implements KafkaReceiver<K, V> {
                                 handler.awaitingTransaction.getAndSet(true);
                                 return Flux.fromIterable(consumerRecords);
                             }))
-                            .concatWith(transactionManager
-                                .sendOffsets(offsetBatch
-                                    .getAndClearOffsets()
-                                    .offsets(),
-                                    handler.consumer.groupMetadata()))
+                            .concatWith(transactionManager.sendOffsets(offsetBatch.getAndClearOffsets().offsets(),
+                                    handler.consumer.toString()))
                             .doAfterTerminate(() -> handler.awaitingTransaction.set(false));
                     });
             return resultFlux.publishOn(transactionManager.scheduler(), preparePublishOnQueueSize(prefetch));

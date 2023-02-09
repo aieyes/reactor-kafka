@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021-2022 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2021-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)
@@ -166,7 +166,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)
@@ -231,7 +231,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         CountDownLatch pauseLatch = new CountDownLatch(1);
         willAnswer(inv -> {
@@ -313,7 +313,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)
@@ -379,7 +379,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)
@@ -448,7 +448,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)
@@ -513,7 +513,7 @@ public class OutOfOrderCommitsTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .maxDeferredCommits(100)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
@@ -97,11 +98,6 @@ public class DefaultKafkaSender<K, V> implements KafkaSender<K, V>, EmitFailureH
                 .fromCallable(() -> {
                     Producer<K, V> producer =
                             producerFactory.createProducer(senderOptions);
-                    if (senderOptions.isTransactional()) {
-                        log.info("Initializing transactions for producer {}",
-                                senderOptions.transactionalId());
-                        producer.initTransactions();
-                    }
                     hasProducer.set(true);
                     return producer;
                 })
@@ -174,8 +170,7 @@ public class DefaultKafkaSender<K, V> implements KafkaSender<K, V>, EmitFailureH
         if (!hasProducer.getAndSet(false)) {
             return;
         }
-        producerMono.doOnNext(producer -> producer.close(senderOptions.closeTimeout()))
-                    .block();
+        producerMono.doOnNext(producer -> producer.close(senderOptions.closeTimeout().toMillis(), TimeUnit.MILLISECONDS)).block();
         if (senderOptions.isTransactional()) {
             senderOptions.scheduler().dispose();
         }

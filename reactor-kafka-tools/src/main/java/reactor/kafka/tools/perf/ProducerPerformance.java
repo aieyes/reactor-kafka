@@ -106,6 +106,7 @@ public class ProducerPerformance {
     }
 
     /** Get the command-line argument parser. */
+    @SuppressWarnings({"deprecation"})
     private static ArgumentParser argParser() {
         ArgumentParser parser = ArgumentParsers
                 .newArgumentParser("producer-performance")
@@ -369,8 +370,6 @@ public class ProducerPerformance {
 
             this.transactionDurationMs = transactionDurationMs;
             this.transactionsEnabled = transactionDurationMs > 0;
-            if (transactionsEnabled)
-                producerProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionalId);
 
             stats = new Stats(numRecords, 5000);
             long startMs = System.currentTimeMillis();
@@ -391,15 +390,12 @@ public class ProducerPerformance {
         public Stats runTest() {
             System.out.println("Running producer performance test using non-reactive API, class=" + this.getClass().getSimpleName()  + " messageSize=" + recordSize);
             KafkaProducer<byte[], byte[]> producer = new KafkaProducer<byte[], byte[]>(producerProps);
-            if (transactionsEnabled)
-                producer.initTransactions();
 
             int currentTransactionSize = 0;
             long transactionStartMs = 0;
             for (int i = 0; i < numRecords; i++) {
                 long sendStartMs = System.currentTimeMillis();
                 if (transactionsEnabled && currentTransactionSize == 0) {
-                    producer.beginTransaction();
                     transactionStartMs = sendStartMs;
                 }
 
@@ -408,14 +404,11 @@ public class ProducerPerformance {
 
                 currentTransactionSize++;
                 if (transactionsEnabled && transactionDurationMs <= (sendStartMs - transactionStartMs)) {
-                    producer.commitTransaction();
                     currentTransactionSize = 0;
                 }
                 if (throttler.shouldThrottle(i, sendStartMs))
                     throttler.throttle();
             }
-            if (transactionsEnabled && currentTransactionSize != 0)
-                producer.commitTransaction();
 
             stats.complete();
             producer.close();

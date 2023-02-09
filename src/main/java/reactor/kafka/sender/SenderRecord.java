@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 package reactor.kafka.sender;
 
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.header.Header;
+
+import javax.annotation.Nullable;
 
 
 /**
@@ -42,7 +43,7 @@ public class SenderRecord<K, V, T> extends ProducerRecord<K, V> {
      * @return new sender record that can be sent to Kafka using {@link KafkaSender#send(org.reactivestreams.Publisher)}
      */
     public static <K, V, T> SenderRecord<K, V, T> create(ProducerRecord<K, V> record, T correlationMetadata) {
-        return new SenderRecord<>(record.topic(), record.partition(), record.timestamp(), record.key(), record.value(), correlationMetadata, record.headers());
+        return new SenderRecord<>(record.topic(), record.partition(), record.timestamp(), record.key(), record.value(), correlationMetadata, null);
     }
 
     /**
@@ -65,8 +66,8 @@ public class SenderRecord<K, V, T> extends ProducerRecord<K, V> {
         return new SenderRecord<K, V, T>(topic, partition, timestamp, key, value, correlationMetadata, null);
     }
 
-    private SenderRecord(String topic, Integer partition, Long timestamp, K key, V value, T correlationMetadata, Iterable<Header> headers) {
-        super(topic, partition, timestamp, key, value, headers);
+    private SenderRecord(String topic, Integer partition, Long timestamp, K key, V value, T correlationMetadata, @Nullable Object headers) {
+        super(topic, partition, timestamp, key, value);
         this.correlationMetadata = correlationMetadata;
     }
 

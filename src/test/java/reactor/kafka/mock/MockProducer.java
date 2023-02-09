@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 
 package reactor.kafka.mock;
 
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.Callback;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -28,26 +26,15 @@ import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
-import org.apache.kafka.common.errors.ProducerFencedException;
 import reactor.kafka.sender.SenderOptions;
 import reactor.kafka.sender.internals.ProducerFactory;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.junit.Assert.assertTrue;
 
 public class MockProducer implements Producer<Integer, String> {
 
@@ -60,9 +47,6 @@ public class MockProducer implements Producer<Integer, String> {
     private boolean closed;
     private boolean inFlightCheckEnabled;
 
-    private boolean transactionInitialized;
-    private boolean transactionInFlight;
-    private boolean producerFenced;
     public int beginCount;
     public int commitCount;
     public int abortCount;
@@ -139,13 +123,7 @@ public class MockProducer implements Producer<Integer, String> {
     }
 
     @Override
-    @Deprecated
     public void close(long timeout, TimeUnit unit) {
-        close(Duration.ofMillis(unit.toMillis(timeout)));
-    }
-
-    @Override
-    public void close(Duration timeout) {
         close();
     }
 
@@ -187,94 +165,13 @@ public class MockProducer implements Producer<Integer, String> {
         }
 
     }
-
-    @Override
-    public void initTransactions() {
-        verifyProducerState();
-        if (this.transactionInitialized) {
-            throw new IllegalStateException("MockProducer has already been initialized for transactions.");
-        }
-        this.transactionInitialized = true;
-    }
-
-    @Override
-    public void beginTransaction() throws ProducerFencedException {
-        verifyProducerState();
-        verifyTransactionsInitialized();
-        this.transactionInFlight = true;
-        this.beginCount++;
-    }
-
-    @Override
-    public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets,
-                                         String consumerGroupId) throws ProducerFencedException {
-        sendOffsetsToTransaction(offsets, new ConsumerGroupMetadata(consumerGroupId));
-    }
-
-    @Override
-    public void sendOffsetsToTransaction(Map<TopicPartition, OffsetAndMetadata> offsets, ConsumerGroupMetadata groupMetadata) throws ProducerFencedException {
-        verifyProducerState();
-        verifyTransactionsInitialized();
-        verifyNoTransactionInFlight();
-        Objects.requireNonNull(groupMetadata);
-
-        if (offsets.size() == 0) {
-            return;
-        }
-        for (Map.Entry<TopicPartition, OffsetAndMetadata> entry : offsets.entrySet())
-            cluster.addOffsetToTransaction(groupMetadata.groupId(), entry.getKey(), entry.getValue().offset());
-        this.sendOffsetsCount++;
-    }
-
-    @Override
-    public void commitTransaction() throws ProducerFencedException {
-        verifyProducerState();
-        verifyTransactionsInitialized();
-        verifyNoTransactionInFlight();
-
-        flush();
-        this.transactionInFlight = false;
-        cluster.commitTransaction();
-        this.commitCount++;
-    }
-
-    @Override
-    public void abortTransaction() throws ProducerFencedException {
-        verifyProducerState();
-        verifyTransactionsInitialized();
-        verifyNoTransactionInFlight();
-        flush();
-        this.cluster.abortTransaction();
-        this.transactionInFlight = false;
-        cluster.abortTransaction();
-        this.abortCount++;
-    }
-
     public void fenceProducer() {
         verifyProducerState();
-        if (!this.transactionInitialized)
-            throw new IllegalStateException("MockProducer hasn't been initialized for transactions.");
-        this.producerFenced = true;
     }
 
     private void verifyProducerState() {
         if (this.closed)
             throw new IllegalStateException("MockProducer is already closed.");
-        if (this.producerFenced)
-            throw new ProducerFencedException("MockProducer is fenced.");
-    }
-
-    private void verifyTransactionsInitialized() {
-        String transactionId = senderOptions.transactionalId();
-        String thread = Thread.currentThread().getName();
-        assertTrue("Transactional operation on wrong thread " + thread, thread.contains("reactor-kafka-sender"));
-        if (!this.transactionInitialized)
-            throw new IllegalStateException("MockProducer hasn't been initialized for transactions.");
-    }
-
-    private void verifyNoTransactionInFlight() {
-        if (!this.transactionInFlight)
-            throw new IllegalStateException("There is no open transaction.");
     }
 
     public static class Pool extends ProducerFactory {

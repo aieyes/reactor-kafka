@@ -63,6 +63,7 @@ import static org.mockito.Mockito.verify;
  * @since 1.3.11
  *
  */
+@SuppressWarnings({"rawtypes", "unchecked"})
 public class CommitRetryTests {
 
     @Test
@@ -102,7 +103,7 @@ public class CommitRetryTests {
                 return consumerRecords;
             }
             return ConsumerRecords.empty();
-        }).given(consumer).poll(any(Duration.class));
+        }).given(consumer).poll(any(Long.class));
         given(consumer.assignment()).willReturn(assigned);
         ReceiverOptions<Object, Object> options = ReceiverOptions.create()
             .commitInterval(Duration.ofMillis(10))

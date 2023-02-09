@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package reactor.kafka.sender;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.errors.ProducerFencedException;
 import org.apache.kafka.common.serialization.Serializer;
 import reactor.core.scheduler.Scheduler;
 import reactor.util.annotation.NonNull;
@@ -188,13 +187,7 @@ public interface SenderOptions<K, V> {
     SenderOptions<K, V> closeTimeout(@NonNull Duration timeout);
 
     /**
-     * Senders created from this options will be transactional if a transactional id is
-     * configured using {@link ProducerConfig#TRANSACTIONAL_ID_CONFIG}. If transactional,
-     * {@link KafkaProducer#initTransactions()} is invoked on the producer to initialize
-     * transactions before any operations are performed on the sender. If scheduler is overridden
-     * using {@link #scheduler(Scheduler)}, the configured scheduler
-     * must be single-threaded. Otherwise, the behaviour is undefined and may result in unexpected
-     * exceptions.
+     * kafka client 0.10.1.1 not supported
      */
     @NonNull
     default boolean isTransactional() {
@@ -208,11 +201,11 @@ public interface SenderOptions<K, V> {
      */
     @Nullable
     default String transactionalId() {
-        return (String) producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG);
+        return null;
     }
 
     @NonNull
     default boolean fatalException(@NonNull Throwable t) {
-        return t instanceof AuthenticationException || t instanceof ProducerFencedException;
+        return t instanceof AuthenticationException;
     }
 }

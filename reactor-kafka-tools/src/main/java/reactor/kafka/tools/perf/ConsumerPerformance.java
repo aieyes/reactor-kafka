@@ -49,7 +49,6 @@ import reactor.kafka.receiver.ReceiverOptions;
 import reactor.kafka.receiver.ReceiverPartition;
 
 import java.text.SimpleDateFormat;
-import java.time.Duration;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -103,6 +102,7 @@ public class ConsumerPerformance {
     }
 
     /** Get the command-line argument parser. */
+    @SuppressWarnings({"deprecation"})
     private static ArgumentParser argParser() {
         ArgumentParser parser = ArgumentParsers.newArgumentParser("consumer-performance").defaultHelp(true)
                 .description("This tool is used to verify the consumer performance.");
@@ -261,7 +261,7 @@ public class ConsumerPerformance {
                 if (System.currentTimeMillis() - joinStart >= joinTimeout) {
                     throw new RuntimeException("Timed out waiting for initial group join.");
                 }
-                consumer.poll(Duration.ofMillis(100));
+                consumer.poll(100);
             }
             consumer.seekToBeginning(Collections.emptyList());
 
@@ -271,7 +271,7 @@ public class ConsumerPerformance {
             long lastConsumedTime = System.currentTimeMillis();
 
             while (messagesRead < numMessages && System.currentTimeMillis() - lastConsumedTime <= timeout) {
-                ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofMillis(100));
+                ConsumerRecords<byte[], byte[]> records = consumer.poll(100);
                 if (records.count() > 0)
                     lastConsumedTime = System.currentTimeMillis();
                 for (ConsumerRecord<byte[], byte[]> record : records) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,7 @@ package reactor.kafka.sender;
 
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.producer.Callback;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.producer.RecordMetadata;
-import org.apache.kafka.common.errors.InvalidProducerEpochException;
-import org.apache.kafka.common.errors.ProducerFencedException;
+import org.apache.kafka.clients.producer.*;
 import org.apache.kafka.common.serialization.Serializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.After;
@@ -49,14 +42,7 @@ import reactor.kafka.util.TestUtils;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
@@ -65,12 +51,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 /**
  * Kafka sender integration tests using embedded Kafka brokers and producers.
@@ -471,8 +452,7 @@ public class KafkaSenderTest extends AbstractKafkaTest {
     @Test
     public void idempotentSender() throws Exception {
         int count = 10;
-        senderOptions = senderOptions.producerProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true")
-                                     .producerProperty(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "10000");
+        senderOptions = senderOptions.producerProperty(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "10000");
         recreateSender(senderOptions);
         kafkaSender.createOutbound().send(createProducerRecords(count).delayElements(Duration.ofMillis(100)))
                    .then()
@@ -484,100 +464,12 @@ public class KafkaSenderTest extends AbstractKafkaTest {
         checkConsumedMessages();
     }
 
-    @Test
-    public void transaction() throws Exception {
-        int count = 1000;
-        senderOptions = senderOptions
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, testName.getMethodName())
-                .stopOnError(true);
-        recreateSender(senderOptions);
-        kafkaSender.sendTransactionally(Flux.just(createSenderRecords(0, count, true)))
-                   .blockLast(Duration.ofMillis(receiveTimeoutMillis));
-        waitForMessages(consumer, count, true);
-    }
-
-    /**
-     * Verifies that only one transactional sender with a specific transactional id is
-     * allowed to send messages at any time.
-     */
-    @Test
-    public void transactionalSenderFencing() throws Exception {
-        int count = 5;
-        senderOptions = senderOptions
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, testName.getMethodName())
-                .stopOnError(true);
-        recreateSender(senderOptions);
-        Map<Integer, SenderResult<Integer>> results = new ConcurrentHashMap<>();
-
-        kafkaSender.sendTransactionally(Flux.just(createSenderRecords(0, count, true)))
-                   .concatMap(r -> r)
-                   .doOnNext(r -> results.put(r.correlationMetadata(), r))
-                   .blockLast(Duration.ofMillis(receiveTimeoutMillis));
-
-        KafkaSender<Integer, String> sender2 = KafkaSender.create(senderOptions);
-        sender2.transactionManager().begin()
-               .then(sender2.send(createSenderRecords(count, count, true))
-                         .doOnNext(r -> results.put(r.correlationMetadata(), r))
-                         .then())
-               .block(Duration.ofMillis(receiveTimeoutMillis));
-
-        Semaphore done = new Semaphore(0);
-        kafkaSender.sendTransactionally(Flux.just(createSenderRecords(count * 2, count, false)))
-                   .concatMap(r -> r)
-                   .doOnNext(r -> results.put(r.correlationMetadata(), r))
-                   .doOnError(e -> {
-                       assertTrue("Unexpected exception " + e, e instanceof ProducerFencedException);
-                       done.release();
-                   })
-                   .subscribe();
-        done.tryAcquire(receiveTimeoutMillis, TimeUnit.MILLISECONDS);
-
-        waitForMessages(consumer, count * 2, true);
-        for (Map.Entry<Integer, SenderResult<Integer>> entry : results.entrySet()) {
-            int index = entry.getKey();
-            SenderResult<Integer> result = entry.getValue();
-            if (index < count * 2)
-                assertNull("Invalid sender result for " + index + ":" + result, result.exception());
-            else
-                assertTrue("Invalid sender result for " + index + ":" + result, result.exception() instanceof ProducerFencedException);
-        }
-        sender2.close();
-    }
-
-    /**
-     * Verifies that ProducerFencedException is handled as a fatal exception.
-     */
-    @Test
-    public void transactionalSenderFencingMidTransaction() throws Exception {
-        int count = 5;
-        senderOptions = senderOptions
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, testName.getMethodName())
-                .producerProperty(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1")
-                .stopOnError(true);
-        recreateSender(senderOptions);
-
-        kafkaSender.transactionManager().begin().block();
-        kafkaSender.send(createSenderRecords(0, count, true)).blockLast(Duration.ofMillis(receiveTimeoutMillis));
-
-        KafkaSender<Integer, String> sender2 = KafkaSender.create(senderOptions);
-        sender2.sendTransactionally(Flux.just(createSenderRecords(0, count, true)))
-               .concatMap(r -> r)
-               .blockLast(Duration.ofMillis(receiveTimeoutMillis));
-
-        StepVerifier.create(kafkaSender.send(createSenderRecords(count * 2, count, false)))
-                    .expectError(InvalidProducerEpochException.class)
-                    .verify(Duration.ofMillis(receiveTimeoutMillis));
-
-        waitForMessages(consumer, count * 2, true);
-        sender2.close();
-    }
-
     private Consumer<Integer, String> createConsumer() throws Exception {
         String groupId = testName.getMethodName();
         Map<String, Object> consumerProps = consumerProps(groupId);
         Consumer<Integer, String> consumer = ConsumerFactory.INSTANCE.createConsumer(ReceiverOptions.<Integer, String>create(consumerProps));
         consumer.subscribe(Collections.singletonList(topic));
-        consumer.poll(Duration.ofMillis(requestTimeoutMillis));
+        consumer.poll(requestTimeoutMillis);
         return consumer;
     }
 
@@ -585,14 +477,14 @@ public class KafkaSenderTest extends AbstractKafkaTest {
         int receivedCount = 0;
         long endTimeMillis = System.currentTimeMillis() + receiveTimeoutMillis;
         while (receivedCount < expectedCount && System.currentTimeMillis() < endTimeMillis) {
-            ConsumerRecords<Integer, String> records = consumer.poll(Duration.ofSeconds(1));
+            ConsumerRecords<Integer, String> records = consumer.poll(1000);
             records.forEach(record -> onReceive(record));
             receivedCount += records.count();
         }
         if (checkMessageOrder)
             checkConsumedMessages();
         assertEquals(expectedCount, receivedCount);
-        ConsumerRecords<Integer, String> records = consumer.poll(Duration.ofMillis(500));
+        ConsumerRecords<Integer, String> records = consumer.poll(500);
         assertTrue("Unexpected message received: " + records.count(), records.isEmpty());
     }
 

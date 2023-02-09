@@ -120,6 +120,7 @@ public class EndToEndLatency {
     }
 
     /** Get the command-line argument parser. */
+    @SuppressWarnings({"deprecation"})
     private static ArgumentParser argParser() {
         ArgumentParser parser = ArgumentParsers.newArgumentParser("end-to-end-latency").defaultHelp(true)
                 .description("This tool is used to verify end to end latency.");
@@ -306,15 +307,15 @@ public class EndToEndLatency {
         public void initialize() {
             long endTimeMs = System.currentTimeMillis() + 10000;
             while (!isAssigned.get() && System.currentTimeMillis() < endTimeMs)
-                consumer.poll(Duration.ofMillis(100));
+                consumer.poll(100);
             if (!isAssigned.get())
                 throw new IllegalStateException("Timed out waiting for assignment");
             consumer.seekToEnd(Collections.emptyList());
-            consumer.poll(Duration.ZERO);
+            consumer.poll(Duration.ZERO.toMillis());
         }
         public Iterator<ConsumerRecord<byte[], byte[]>> sendAndReceive(String topic, byte[] message, long timeout) throws Exception {
             producer.send(new ProducerRecord<byte[], byte[]>(topic, message)).get();
-            Iterator<ConsumerRecord<byte[], byte[]>> recordIter = consumer.poll(Duration.ofMillis(timeout)).iterator();
+            Iterator<ConsumerRecord<byte[], byte[]>> recordIter = consumer.poll(timeout).iterator();
             return recordIter;
         }
         public void close() {

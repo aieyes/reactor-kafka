@@ -46,6 +46,7 @@ public final class PassThroughCoreSubscriber<U> implements CoreSubscriber<U> {
         return messagesOnNextCount.get();
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
     public static void enableHook() {
         messagesOnNextCount.set(0);
         Hooks.onEachOperator(HOOK_KEY,

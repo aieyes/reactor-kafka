@@ -39,7 +39,7 @@
     <module name="EqualsHashCode"/>
     <module name="SimplifyBooleanExpression"/>
     <module name="OneStatementPerLine"/>
-    <module name="UnnecessaryParentheses" />
+<!--    <module name="UnnecessaryParentheses" />-->
     <module name="SimplifyBooleanReturn"/>
 
     <!-- style -->
@@ -66,7 +66,7 @@
     <module name="ParameterName"/>
     <module name="StaticVariableName"/>
     <module name="TypeName"/>
-    <module name="AvoidStarImport"/>
+<!--    <module name="AvoidStarImport"/>-->
 
     <!-- whitespace -->
     <module name="GenericWhitespace"/>

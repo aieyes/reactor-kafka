@@ -256,13 +256,6 @@ public class SampleScenarios {
         }
     }
 
-    /**
-     * This sample demonstrates the use of transactions to send data to multiple topic partitions,
-     * such that if one of the sends fails, the transaction is aborted and the data from uncommitted
-     * transactions are not visible to consumers configured with {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG}
-     * <code>read_committed</code>.
-     *
-     */
     public static class TransactionalSend extends AbstractScenario {
         private final String destTopic1;
         private final String destTopic2;
@@ -276,8 +269,7 @@ public class SampleScenarios {
         @Override
         public SenderOptions<Integer, Person> senderOptions() {
             return super.senderOptions()
-                        .producerProperty(ProducerConfig.ACKS_CONFIG, "all")
-                        .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "TransactionalSend");
+                        .producerProperty(ProducerConfig.ACKS_CONFIG, "all");
         }
         @Override
         public Flux<?> flux() {
@@ -305,16 +297,7 @@ public class SampleScenarios {
             scheduler.dispose();
         }
     }
-    /**
-     * This sample demonstrates an exactly/once transactional flow where messages are received
-     * from partitions of a source topic, transformed and sent to a destination topic using a
-     * transactional sender. Consumers with {@link ConsumerConfig#ISOLATION_LEVEL_CONFIG}
-     * <code>read_committed</code> will consume exactly one copy of each message from the
-     * destination topic after the messages are committed by the sender. Offsets for the
-     * source partitions are committed using the transactional sender to ensure that even
-     * if exceptions are encountered, the flow restarts from the last committed state.
-     *
-     */
+
     public static class KafkaExactlyOnce extends AbstractScenario {
         protected final String sourceTopic;
         protected final String destTopic;
@@ -327,13 +310,11 @@ public class SampleScenarios {
         @Override
         public SenderOptions<Integer, Person> senderOptions() {
             return super.senderOptions()
-                        .producerProperty(ProducerConfig.ACKS_CONFIG, "all")
-                        .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "KafkaExactlyOnce");
+                        .producerProperty(ProducerConfig.ACKS_CONFIG, "all");
         }
         @Override
         public ReceiverOptions<Integer, Person> receiverOptions() {
-            return super.receiverOptions()
-                    .consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+            return super.receiverOptions();
         }
         public ProducerRecord<Integer, Person> transform(Person p) {
             Person transformed = new Person(p.id(), p.firstName(), p.lastName());

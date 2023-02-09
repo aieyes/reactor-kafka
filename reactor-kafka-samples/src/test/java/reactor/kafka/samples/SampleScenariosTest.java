@@ -230,8 +230,7 @@ public class SampleScenariosTest extends AbstractKafkaTest {
                 return super.receiverOptions()
                             .maxDelayRebalance(Duration.ZERO)
                             .consumerProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "10")
-                            .consumerProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-                            .consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
+                            .consumerProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
             }
             @Override
             public ProducerRecord<Integer, Person> transform(Person p) {

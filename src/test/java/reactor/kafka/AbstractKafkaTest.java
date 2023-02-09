@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,7 @@
 package reactor.kafka;
 
 import org.apache.kafka.clients.admin.AdminClient;
-import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.DescribeTopicsResult;
-import org.apache.kafka.clients.admin.KafkaAdminClient;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -185,8 +183,8 @@ public abstract class AbstractKafkaTest {
         String newTopic = prefix + "_" + System.nanoTime();
 
         try (
-            AdminClient adminClient = KafkaAdminClient.create(
-                Collections.singletonMap(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers())
+            AdminClient adminClient = AdminClient.create(
+                Collections.singletonMap(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers())
             )
         ) {
             adminClient.createTopics(Arrays.asList(new NewTopic(newTopic, partitions, (short) 1)))
@@ -270,8 +268,8 @@ public abstract class AbstractKafkaTest {
 
     private boolean hasLeader(int partition) {
         try (
-            AdminClient adminClient = KafkaAdminClient.create(
-                Collections.singletonMap(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers())
+            AdminClient adminClient = AdminClient.create(
+                Collections.singletonMap(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers())
             )
         ) {
             DescribeTopicsResult describeTopicsResult = adminClient.describeTopics(Arrays.asList(topic));

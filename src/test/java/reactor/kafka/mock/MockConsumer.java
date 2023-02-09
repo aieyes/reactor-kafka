@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2022 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package reactor.kafka.mock;
 
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -43,7 +42,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -109,11 +107,6 @@ public class MockConsumer extends org.apache.kafka.clients.consumer.MockConsumer
     public void addCommitException(KafkaException exception, int count) {
         for (int i = 0; i < count; i++)
             commitExceptions.add(exception);
-    }
-
-    @Override
-    public ConsumerGroupMetadata groupMetadata() {
-        return new ConsumerGroupMetadata(receiverOptions.groupId(), 1, "1", Optional.empty());
     }
 
     public long pollCount() {
@@ -208,7 +201,6 @@ public class MockConsumer extends org.apache.kafka.clients.consumer.MockConsumer
         }
     }
 
-    @Override
     public ConsumerRecords<Integer, String> poll(Duration timeout) {
         acquire();
         try {

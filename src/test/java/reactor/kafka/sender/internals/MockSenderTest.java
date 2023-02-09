@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,12 @@ package reactor.kafka.sender.internals;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.InvalidTopicException;
 import org.apache.kafka.common.errors.LeaderNotAvailableException;
-import org.apache.kafka.common.errors.ProducerFencedException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -628,81 +626,6 @@ public class MockSenderTest {
 
         assertEquals(0, remaining.size());
         assertTrue("Sends not retried " + exceptionCount, exceptionCount.intValue() >= 1);
-    }
-
-    @Test
-    public void commitTransaction() throws Exception {
-        int count = 5;
-        String transactionId = "commitTransaction";
-        SenderOptions<Integer, String> senderOptions = SenderOptions.<Integer, String>create()
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, transactionId)
-                .stopOnError(true);
-
-        sender = new DefaultKafkaSender<>(producerFactory, senderOptions);
-        OutgoingRecords outgoing = outgoingRecords.append(topic, count);
-
-        StepVerifier.create(sender.transactionManager().begin())
-                    .expectComplete()
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-
-        StepVerifier.create(sender.send(outgoing.senderRecords())
-                                  .doOnNext(result -> assertTrue(Thread.currentThread().getName().contains(transactionId))))
-                    .expectNextCount(count)
-                    .then(() -> {
-                        for (TopicPartition partition : cluster.partitions(topic))
-                            assertEquals(0, cluster.log(partition).size());
-                    })
-                    .expectComplete()
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-
-        StepVerifier.create(sender.transactionManager().commit())
-                    .expectComplete()
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-        outgoing.verify(cluster, topic, true);
-    }
-
-    @Test
-    public void abortTransaction() throws Exception {
-        int count = 5;
-        SenderOptions<Integer, String> senderOptions = SenderOptions.<Integer, String>create()
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "transactionalSender")
-                .stopOnError(true);
-
-        sender = new DefaultKafkaSender<>(producerFactory, senderOptions);
-        OutgoingRecords outgoing = outgoingRecords.append(topic, count);
-
-        StepVerifier.create(sender.transactionManager().begin())
-                    .expectComplete()
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-
-        StepVerifier.create(sender.send(outgoing.senderRecords()).then(sender.transactionManager().abort()))
-                    .then(() -> {
-                        for (TopicPartition partition : cluster.partitions(topic))
-                            assertEquals(0, cluster.log(partition).size());
-                    })
-                    .expectComplete()
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-    }
-
-    @Test
-    public void illegalTransactionState() throws Exception {
-        SenderOptions<Integer, String> senderOptions = SenderOptions.<Integer, String>create()
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "transactionalSender")
-                .stopOnError(true);
-        sender = new DefaultKafkaSender<>(producerFactory, senderOptions);
-        sender.transactionManager().begin().block(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-        sender.transactionManager().commit().block(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-
-        producer.fenceProducer();
-        StepVerifier.create(sender.transactionManager().begin())
-                    .expectError(ProducerFencedException.class)
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-        StepVerifier.create(sender.transactionManager().commit())
-                    .expectError(ProducerFencedException.class)
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
-        StepVerifier.create(sender.transactionManager().abort())
-                    .expectError(ProducerFencedException.class)
-                    .verify(Duration.ofMillis(DEFAULT_TEST_TIMEOUT));
     }
 
     /**

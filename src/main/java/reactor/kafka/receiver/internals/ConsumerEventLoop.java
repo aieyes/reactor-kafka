@@ -271,11 +271,11 @@ class ConsumerEventLoop<K, V> implements Sinks.EmitFailureHandler {
                             if (log.isTraceEnabled()) {
                                 try {
                                     List<String> positions = new ArrayList<>();
-                                    partitions.forEach(part -> positions.add(String.format("%s pos: %d", part,
-                                        ConsumerEventLoop.this.consumer.position(part, Duration.ofSeconds(5)))));
-                                    log.trace("positions: {}, committed: {}", positions,
-                                            ConsumerEventLoop.this.consumer.committed(new HashSet<>(partitions),
-                                                    Duration.ofSeconds(5)));
+                                    partitions.forEach(part -> {
+                                        long position = ConsumerEventLoop.this.consumer.position(part);
+                                        positions.add(String.format("%s pos: %d", part, position));
+                                        log.trace("position: {}, committed: {}", position, ConsumerEventLoop.this.consumer.committed(part));
+                                    });
                                 } catch (Exception ex) {
                                     log.error("Failed to get positions or committed", ex);
                                 }
@@ -354,7 +354,7 @@ class ConsumerEventLoop<K, V> implements Sinks.EmitFailureHandler {
 
                     ConsumerRecords<K, V> records;
                     try {
-                        records = consumer.poll(pollTimeout);
+                        records = consumer.poll(pollTimeout.toMillis());
                     } catch (WakeupException e) {
                         log.debug("Consumer woken");
                         records = ConsumerRecords.empty();
@@ -527,7 +527,7 @@ class ConsumerEventLoop<K, V> implements Sinks.EmitFailureHandler {
 
         private void waitFor(long endTimeMillis) {
             while (inProgress.get() > 0 && endTimeMillis - System.currentTimeMillis() > 0) {
-                consumer.poll(Duration.ofMillis(1));
+                consumer.poll(1L);
             }
         }
     }
@@ -561,11 +561,7 @@ class ConsumerEventLoop<K, V> implements Sinks.EmitFailureHandler {
                                 commitEvent.runIfRequired(forceCommit);
                                 commitEvent.waitFor(closeEndTimeMillis);
                             }
-
-                            long timeoutMillis = closeEndTimeMillis - System.currentTimeMillis();
-                            if (timeoutMillis < 0)
-                                timeoutMillis = 0;
-                            consumer.close(Duration.ofMillis(timeoutMillis));
+                            consumer.close();
                             consumer = null;
                             break;
                         } catch (WakeupException e) {

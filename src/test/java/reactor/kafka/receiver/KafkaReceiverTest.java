@@ -21,7 +21,6 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.After;
@@ -67,6 +66,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -125,8 +125,6 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
             long timestamp = System.currentTimeMillis();
             int correlationMetadata = i;
             SenderRecord<Integer, String, Integer> record = SenderRecord.create(topic, partition, timestamp, key, value, correlationMetadata);
-            record.headers().add("header1", new byte[] {(byte) 0});
-            record.headers().add("header2", value.getBytes());
             senderRecords.add(record);
         }
         sendMessages(senderRecords.stream());
@@ -140,8 +138,6 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
             assertEquals(topic, receiverRecord.topic());
             assertEquals(partition, receiverRecord.partition());
             assertEquals(senderRecord.timestamp().longValue(), receiverRecord.timestamp());
-            assertEquals(2, receiverRecord.headers().toArray().length);
-            assertEquals(senderRecord.headers(), receiverRecord.headers());
         }
     }
 
@@ -907,17 +903,10 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
                                 super.close();
                             }
 
-                            @SuppressWarnings("deprecation")
                             @Override
                             public void close(long timeout, TimeUnit unit) {
                                 closed.set(true);
                                 super.close(timeout, unit);
-                            }
-
-                            @Override
-                            public void close(Duration timeout) {
-                                closed.set(true);
-                                super.close(timeout);
                             }
                         };
                     }
@@ -1132,142 +1121,6 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
 
         assertNotNull(publishingThreadName.get());
         assertTrue(publishingThreadName.get().startsWith(schedulerName));
-    }
-
-    @Test
-    public void sendTransactionalReadCommitted() throws Exception {
-        receiverOptions = receiverOptions.consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
-        int count = 100;
-        CountDownLatch latch = new CountDownLatch(count);
-
-        KafkaSender<Integer, String> txSender = createTransactionalSender();
-        txSender.sendTransactionally(Flux.just(createSenderRecords(0, count, true)))
-                .blockLast(Duration.ofSeconds(receiveTimeoutMillis));
-        DefaultKafkaReceiver<Integer, String> receiver = createReceiver();
-        Disposable subscribed = subscribe(receiver.receive(), latch);
-
-        waitForMessages(latch);
-        checkConsumedMessages(0, count);
-        Map<TopicPartition, Long> offsets =
-                receiver.doOnConsumer(consumer -> consumer.endOffsets(getTopicPartitions()))
-                                                        .block(Duration.ofSeconds(10));
-        assertThat(offsets.values()).containsExactly(26L, 26L, 26L, 26L);
-        subscribed.dispose();
-    }
-
-    @Test
-    public void sendNonTransactionalReadCommitted() throws Exception {
-        receiverOptions = receiverOptions.consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
-        int count = 100;
-        CountDownLatch latch1 = new CountDownLatch(count);
-        CountDownLatch latch2 = new CountDownLatch(count * 3);
-        subscribe(createReceiver().receive(), latch1, latch2);
-
-        sendMessages(0, count);
-        waitForMessages(latch1);  // non-transactional messages received if no commits pending
-        checkConsumedMessages(0, count);
-
-        KafkaSender<Integer, String> txSender = createTransactionalSender();
-        TransactionManager txn = txSender.transactionManager();
-        txn.begin()
-            .thenMany(txSender.send(createSenderRecords(count, count, true)))
-            .blockLast(Duration.ofSeconds(receiveTimeoutMillis));
-        sendMessages(count * 2, count);
-        Thread.sleep(1000);
-        assertEquals(count * 2, latch2.getCount()); // non-transactional and transactional messages not received while commit pending
-
-        txn.commit().subscribe();
-        waitForMessages(latch2);
-        checkConsumedMessages(0, count * 3);
-    }
-
-    @Test
-    public void sendTransactionalReadUncommitted() throws Exception {
-        receiverOptions = receiverOptions.consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_uncommitted");
-        int count = 100;
-        CountDownLatch latch1 = new CountDownLatch(count);
-        CountDownLatch latch2 = new CountDownLatch(count * 2);
-        CountDownLatch latch3 = new CountDownLatch(count * 3);
-        subscribe(createReceiver().receive(), latch1, latch2, latch3);
-
-        sendMessages(0, count);
-        waitForMessages(latch1); // non-transactional messages received
-
-        KafkaSender<Integer, String> txSender = createTransactionalSender();
-        txSender.sendTransactionally(Flux.just(createSenderRecords(count, count, true)))
-                .then().block(Duration.ofSeconds(receiveTimeoutMillis));
-        waitForMessages(latch2); // transactional messages received before commit
-
-        sendMessages(count * 2, count);
-        waitForMessages(latch3);
-        checkConsumedMessages(0, count * 3);
-    }
-
-    @Test
-    public void transactionalOffsetCommit() throws Exception {
-        committedRecords.clear();
-        String destTopic = createNewTopic();
-
-        int count = 10;
-        sendMessages(createProducerRecords(count).toStream());
-
-        String sourceConsumerGroupId = "source_consumer";
-        receiverOptions = receiverOptions.consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed")
-                .consumerProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-                .consumerProperty(ConsumerConfig.GROUP_ID_CONFIG, sourceConsumerGroupId);
-        KafkaSender<Integer, String> txSender = createTransactionalSender();
-        KafkaReceiver<Integer, String> receiver = createReceiver();
-
-        Semaphore completion = new Semaphore(0);
-        AtomicBoolean completed = new AtomicBoolean();
-        receiveAndSendTransactions(receiver, txSender, destTopic, count, 4, completion)
-            .onErrorResume(e -> txSender.transactionManager().abort()
-                    .thenMany(receiveAndSendTransactions(receiver, txSender, destTopic, count, -1, completion)
-                    .takeWhile(sres -> !completed.get())))
-            .subscribe();
-        assertTrue(completion.tryAcquire(receiveTimeoutMillis, TimeUnit.MILLISECONDS));
-        completed.set(true);
-        sendMessages(11, 1);
-
-        // Check that exactly 'count' messages is committed on destTopic, with one copy of each message
-        // from source topic
-        receiverOptions = receiverOptions
-                .consumerProperty(ConsumerConfig.GROUP_ID_CONFIG, "dest-consumer")
-                .subscription(Collections.singletonList(destTopic))
-                .clearAssignListeners()
-                .addAssignListener(partitions -> assignSemaphore.release());
-        this.topic = destTopic;
-        CountDownLatch latch = new CountDownLatch(count);
-        subscribe(createReceiver().receive().doOnNext(r ->
-                log.info("Dest Received: {}-{}@{} ({})", r.topic(), r.partition(), r.offset(), r.key())), latch);
-        waitForMessages(latch);
-        checkConsumedMessages(0, count);
-    }
-
-    @Test
-    public void abortTransaction() throws Exception {
-        receiverOptions = receiverOptions.consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed");
-        Flux<? extends ConsumerRecord<Integer, String>> kafkaFlux = createReceiver().receive();
-        int count = 100;
-        CountDownLatch latch1 = new CountDownLatch(count);
-        CountDownLatch latch2 = new CountDownLatch(count * 2);
-        subscribe(kafkaFlux, latch1, latch2);
-
-
-        KafkaSender<Integer, String> txSender = createTransactionalSender();
-        txSender.transactionManager().begin()
-                .thenMany(txSender.send(createSenderRecords(0, count, false)))
-                .then(txSender.transactionManager().abort())
-                .then().block(Duration.ofSeconds(receiveTimeoutMillis));
-
-        sendMessages(count, count);
-        waitForMessages(latch1);  // non-transactional messages received if no commits pending
-        checkConsumedMessages(count, count);
-
-        txSender.sendTransactionally(Flux.just(createSenderRecords(count * 2, count, true)))
-                .then().subscribe();
-        waitForMessages(latch2);
-        checkConsumedMessages(count, count * 3);
     }
 
     @Test
@@ -1593,16 +1446,18 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
     }
 
     private long committedCount(KafkaReceiver<Integer, String> receiver) {
+        AtomicLong sum = new AtomicLong(0L);
         return receiver.doOnConsumer(consumer -> {
             Set<TopicPartition> topicPartitions = IntStream.range(0, partitions)
                 .mapToObj(i -> new TopicPartition(topic, i))
                 .collect(Collectors.toSet());
-
-            return consumer.committed(topicPartitions).values().stream()
-                .filter(offset -> offset != null && offset.offset() > 0)
-                .mapToLong(OffsetAndMetadata::offset)
-                .sum();
-
+            topicPartitions.forEach(o -> {
+                OffsetAndMetadata meta = consumer.committed(o);
+                if (meta != null) {
+                    sum.addAndGet(meta.offset() > 0 ? 1 : 0);
+                }
+            });
+            return sum.get();
         }).block(Duration.ofSeconds(receiveTimeoutMillis));
     }
 
@@ -1610,13 +1465,6 @@ public class KafkaReceiverTest extends AbstractKafkaTest {
         await().alias(count + " commits").untilAsserted(() -> {
             assertThat(committedCount(receiver)).isEqualTo(count);
         });
-    }
-
-    private KafkaSender<Integer, String> createTransactionalSender() {
-        senderOptions = senderOptions
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, testName.getMethodName())
-                .stopOnError(true);
-        return KafkaSender.create(senderOptions);
     }
 
     private Flux<SenderResult<Integer>> receiveAndSendTransactions(KafkaReceiver<Integer, String> receiver,

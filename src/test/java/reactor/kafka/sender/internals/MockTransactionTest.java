@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 VMware Inc. or its affiliates, All Rights Reserved.
+ * Copyright (c) 2016-2023 VMware Inc. or its affiliates, All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,8 @@
 package reactor.kafka.sender.internals;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
 import org.junit.After;
@@ -87,7 +85,6 @@ public class MockTransactionTest {
         receiverOptions = ReceiverOptions.<Integer, String>create()
                 .consumerProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId)
                 .consumerProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-                .consumerProperty(ConsumerConfig.ISOLATION_LEVEL_CONFIG, "read_committed")
                 .consumerProperty(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(maxPollRecords))
                 .addAssignListener(partitions -> {
                     for (ReceiverPartition p : partitions)
@@ -104,8 +101,7 @@ public class MockTransactionTest {
         for (TopicPartition partition : cluster.partitions())
             receiveStartOffsets.put(partition, 0L);
 
-        SenderOptions<Integer, String> senderOptions = SenderOptions.<Integer, String>create()
-                .producerProperty(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "exactlyOnce");
+        SenderOptions<Integer, String> senderOptions = SenderOptions.create();
         producer = new MockProducer(cluster);
         Pool producerFactory = new Pool(Arrays.asList(producer));
         sender = new DefaultKafkaSender<>(producerFactory, senderOptions);
@@ -333,7 +329,7 @@ public class MockTransactionTest {
             this.consumerGroupId = consumerGroupId;
         }
         Mono<Void> commit() {
-            return transactionManager.sendOffsets(offsets, new ConsumerGroupMetadata(consumerGroupId)).then(transactionManager.commit());
+            return transactionManager.sendOffsets(offsets, consumerGroupId).then(transactionManager.commit());
         }
         Mono<Void> commitAndBegin() {
             return commit().then(transactionManager.begin());
